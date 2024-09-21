@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Life Controversy Search</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1,
+        h2 {
+            color: #333;
+        }
+
+        .search-container {
+            margin-bottom: 20px;
+        }
+
+        #searchInput {
+            width: 70%;
+            padding: 10px;
+            font-size: 16px;
+        }
+
+        #searchButton {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        #result,
+        #suggestedName,
+        #disambiguationOptions {
+            margin-top: 20px;
+        }
+
+        #suggestedName {
+            font-style: italic;
+            color: #666;
+        }
+
+        .controversy {
+            background-color: #f9f9f9;
+            border-left: 3px solid #4CAF50;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .disambiguation-option {
+            cursor: pointer;
+            color: #4CAF50;
+            text-decoration: underline;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Personalities and Celebrities controversy search</h1>
+        <h2> <em>Before admiring someone, ensure you understand them well enough, and then carefully choose who to follow as a role model</em></h2>
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Enter a person's name">
+            <button id="searchButton">Search</button>
+        </div>
+        <div id="disambiguationOptions"></div>
+        <div id="suggestedName"></div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function searchControversies(personInput) {
+            const resultDiv = document.getElementById('result');
+            const suggestedNameDiv = document.getElementById('suggestedName');
+            const disambiguationOptionsDiv = document.getElementById('disambiguationOptions');
+            resultDiv.innerHTML = "Searching...";
+            suggestedNameDiv.innerHTML = "";
+            disambiguationOptionsDiv.innerHTML = "";
+
+            try {
+                // First, search for the closest match
+                const searchResponse = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(personInput)}&format=json&origin=*`);
+                const searchData = await searchResponse.json();
+
+                if (!searchData.query || !searchData.query.search || searchData.query.search.length === 0) {
+                    throw new Error("No results found");
+                }
+
+                const bestMatch = searchData.query.search[0].title;
+
+                // Check if it's a disambiguation page
+                const disambigResponse = await fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageprops&titles=${encodeURIComponent(bestMatch)}&format=json&origin=*`);
+                const disambigData = await disambigResponse.json();
+                const pageId = Object.keys(disambigData.query.pages)[0];
+                const isDisambiguation = disambigData.query.pages[pageId].pageprops && disambigData.query.pages[pageId].pageprops.disambiguation !== undefined;
+
+                if (isDisambiguation) {
+                    // Handle disambiguation
+                    const options = searchData.query.search.slice(0, 5); // Get top 5 results
+                    disambiguationOptionsDiv.innerHTML = "<h3>Multiple matches found. Please select one:</h3>" +
+                        options.map(option => `<div class="disambiguation-option" onclick="searchControversies('${option.title}')">${option.title}</div>`).join("");
+                    resultDiv.innerHTML = "";
+                    return;
+                }
+
+                suggestedNameDiv.innerHTML = `Showing results for: <strong>${bestMatch}</strong>`;
+
+                // Now, fetch the full content for the best match
+                const contentResponse = await fetch(`https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&explaintext=1&titles=${encodeURIComponent(bestMatch)}&origin=*`);
+                const contentData = await contentResponse.json();
+
+                const contentPageId = Object.keys(contentData.query.pages)[0];
+                const content = contentData.query.pages[contentPageId].extract;
+
+                if (!content) {
+                    throw new Error("No content found for this person");
+                }
+
+                const controversies = extractControversies(content);
+
+                if (controversies.length > 0) {
+                    resultDiv.innerHTML = "<h2>Potential Controversies:</h2>" +
+                        controversies.map(c => `<div class="controversy">${c}</div>`).join("");
+                } else {
+                    resultDiv.innerHTML = "<p>No significant controversies found in the available information.</p>";
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p>Error: ${error.message}</p>`;
+                console.error("API Error:", error);
+            }
+        }
+
+        function extractControversies(content) {
+            const controversyKeywords = [
+                'controversy', 'scandal', 'criticism', 'dispute', 'allegation',
+                'divorce', 'affair', 'lawsuit', 'arrested', 'addiction',
+                'conflict', 'feuded', 'accused', 'controversial', 'legal issues',
+                'backlash', 'outcry', 'protest', 'outrage', 'infamous', 'investigated'
+            ];
+
+            const paragraphs = content.split('\n').filter(p => p.trim().length > 0);
+            const controversies = [];
+
+            for (const paragraph of paragraphs) {
+                if (controversyKeywords.some(keyword => paragraph.toLowerCase().includes(keyword))) {
+                    controversies.push(paragraph);
+                }
+            }
+
+            return controversies;
+        }
+
+        document.getElementById('searchButton').addEventListener('click', () => {
+            const personInput = document.getElementById('searchInput').value;
+            searchControversies(personInput);
+        });
+
+        document.getElementById('searchInput').addEventListener('keypress', function (event) {
+            if (event.key === 'Enter') {
+                const personInput = document.getElementById('searchInput').value;
+                searchControversies(personInput);
+            }
+        });
+    </script>
+    </div>
+</body>
+
+</html>
